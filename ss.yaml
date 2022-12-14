@@ -1,0 +1,162 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  annotations:
+  labels:
+    app: openshift-logforwarding-splunk
+    app.kubernetes.io/component: fluentd
+    app.kubernetes.io/instance: openshift-logforwarding-splunk
+    app.kubernetes.io/name: openshift-logforwarding-splunk
+  name: openshift-logforwarding-splunk
+  namespace: openshift-logging
+spec:
+  podManagementPolicy: OrderedReady
+  replicas: 2
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: openshift-logforwarding-splunk
+  serviceName: openshift-logforwarding-splunk-headless
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: openshift-logforwarding-splunk
+    spec:
+      containers:
+      - args:
+        - fluentd
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              key: fluentd-loglevel
+              name: openshift-logforwarding-splunk
+        - name: SHARED_KEY
+          valueFrom:
+            secretKeyRef:
+              key: shared_key
+              name: openshift-logforwarding-splunk
+        - name: SPLUNK_HOST
+          valueFrom:
+            configMapKeyRef:
+              key: splunk-hostname
+              name: openshift-logforwarding-splunk
+        - name: SPLUNK_SOURCETYPE
+          valueFrom:
+            configMapKeyRef:
+              key: splunk-sourcetype
+              name: openshift-logforwarding-splunk
+        - name: SPLUNK_SOURCE
+          valueFrom:
+            configMapKeyRef:
+              key: splunk-source
+              name: openshift-logforwarding-splunk
+        - name: SPLUNK_PORT
+          valueFrom:
+            configMapKeyRef:
+              key: splunk-port
+              name: openshift-logforwarding-splunk
+        - name: SPLUNK_PROTOCOL
+          valueFrom:
+            configMapKeyRef:
+              key: splunk-protocol
+              name: openshift-logforwarding-splunk
+        - name: SPLUNK_INSECURE
+          valueFrom:
+            configMapKeyRef:
+              key: splunk-insecure
+              name: openshift-logforwarding-splunk
+        - name: SPLUNK_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: hec-token
+              name: openshift-logforwarding-splunk
+        - name: SPLUNK_INDEX
+          valueFrom:
+            configMapKeyRef:
+              key: splunk-index
+              name: openshift-logforwarding-splunk
+        - name: FLUENTD_SSL_PASSPHRASE
+          valueFrom:
+            secretKeyRef:
+              key: fluentd-ssl-passsphrase
+              name: openshift-logforwarding-splunk
+        image: registry.redhat.io/openshift4/ose-logging-fluentd:v4.6
+        imagePullPolicy: Always
+        livenessProbe:
+          failureThreshold: 3
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          successThreshold: 1
+          tcpSocket:
+            port: 24224
+          timeoutSeconds: 3
+        name: openshift-logforwarding-splunk
+        ports:
+        - containerPort: 24224
+          name: forwarder-tcp
+          protocol: TCP
+        - containerPort: 24224
+          name: forwarder-udp
+          protocol: UDP
+        readinessProbe:
+          failureThreshold: 3
+          initialDelaySeconds: 2
+          periodSeconds: 3
+          successThreshold: 1
+          tcpSocket:
+            port: 24224
+          timeoutSeconds: 2
+        resources:
+          limits:
+            cpu: 500m
+            memory: 1Gi
+          requests:
+            cpu: 100m
+            memory: 512Mi
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /etc/fluent/
+          name: openshift-logforwarding-splunk-config
+          readOnly: true
+        - mountPath: /secret/fluentd
+          name: openshift-logforwarding-splunk
+          readOnly: true
+        - mountPath: /var/log/fluentd
+          name: buffer
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      serviceAccount: openshift-logforwarding-splunk
+      serviceAccountName: openshift-logforwarding-splunk
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - configMap:
+          defaultMode: 420
+          items:
+          - key: td-agent.conf
+            path: fluent.conf
+          name: openshift-logforwarding-splunk
+          optional: true
+        name: openshift-logforwarding-splunk-config
+      - name: openshift-logforwarding-splunk
+        secret:
+          defaultMode: 420
+          items:
+          - key: forwarder-tls.crt
+            path: tls.crt
+          - key: forwarder-tls.key
+            path: tls.key
+          secretName: openshift-logforwarding-splunk
+      - emptyDir: {}
+        name: buffer
+  updateStrategy:
+    type: RollingUpdate
